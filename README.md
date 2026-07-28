@@ -3,13 +3,12 @@
 ```mermaid
 flowchart TD
     %% 独立した機能
-    subgraph Independent [定期バッチ・参照系]
+subgraph Independent [定期バッチ・参照系]
         A[自動有給付与]
         B[有給照会]
         C[失効監視アラート]
     end
 
-    %% メインの申請・承認フロー
     subgraph Workflow [申請・承認ワークフロー]
         D[有給申請] --> E[承認待ちでシート書き込み]
         E --> F[上司に承認要請メール送信]
