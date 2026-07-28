@@ -1,1 +1,191 @@
+/**
+ * Monitor.gs
+ * 1. 放置されている申請の監視（ステータス変更＋催促メール）
+ * 2. 有効期限が迫っている有給の失効アラート＆法定5日取得チェック（社員マスタ連携）
+ */
+function runDailyMonitors() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName("取得履歴");
+  const grantSheet = ss.getSheetByName("付与履歴");
+  const masterSheet = ss.getSheetByName("社員マスタ");
+  const now = new Date();
 
+  // --------------------------------------------------
+  // 社員マスタからメールアドレス・名前のマップを作成
+  // --------------------------------------------------
+  const emailMap = buildEmployeeEmailMap(masterSheet);
+  const nameMap = buildEmployeeNameMap(masterSheet);
+  const formBaseUrl = "https://docs.google.com/forms/d/e/13qr4ek6SvJogwMbZ9E_HWUT_JOfCcgfNHcwDzQ6id6U/viewform";
+
+  // ==================================================
+  // 1. 放置申請の監視（Prefilled URL対応版）
+  // ==================================================
+  const logs = logSheet.getDataRange().getValues();
+  for (let i = 1; i < logs.length; i++) {
+    const empId = logs[i][1];   // B列: 社員ID
+    const rawDate = logs[i][2]; // C列: 取得日
+    const applyId = logs[i][5]; // F列: 取得ID (G-タイムスタンプ)
+    const status = logs[i][6];  // G列: 承認ステータス
+
+    if (status === "承認待ち") {
+      const timestampStr = String(applyId).replace("G-", "");
+      const applyTime = new Date(timestampStr);
+
+      //申請のタイムスタンプと「今」の間が24時間以上のものだけを抽出//
+      //applyTime.getTime()="applyTime"をミリ秒に変換して中身が日付であるか確認//
+      if (!isNaN(applyTime.getTime()) && (now - applyTime) > 24 * 60 * 60 * 1000) {
+        const empName = nameMap[empId] || empId;//名簿でlookupして、登録されてないときはIDで代用//
+        const targetDate = new Date(rawDate);
+        const formattedDate = Utilities.formatDate(targetDate, "Asia/Tokyo", "yyMMdd");
+        const prefilledUrl = formBaseUrl + "?usp=pp_url&entry.384500102=" + applyId;
+
+        // 管理者（上司）へ催促
+        MailApp.sendEmail(
+          "admin@example.com",
+          "【要対応】有給申請の承認が滞っています",
+          `${empName}さんの${formattedDate}の有給申請が24時間以上未対応です。\n\n▼以下のリンクからそのまま承認・調整が可能です：\n${prefilledUrl}`
+        );
+
+        // 事務側へフォロー依頼
+        MailApp.sendEmail(
+          "admin+clerk@example.com",
+          `【放置警告】${empName}さんの有給申請が24時間以上未対応です`,
+          `事務担当者様\n\n以下の有給申請が24時間以上承認されず放置されています。\nステータスを「【要】事務対応」に変更しました。\n\n・申請者: ${empName}（ID: ${empId}）\n・取得予定日: ${formattedDate}\n・対象申請ID: ${applyId}`
+        );
+
+        // 申請者へ途中経過
+        const applicantEmail = logs[i][4]; // E列: 申請者メールアドレス
+        if (applicantEmail) {
+          MailApp.sendEmail(
+            applicantEmail,
+            "【確認中】有給申請の進捗状況のお知らせ",
+            `${empName} 様\n\n申請いただいた有給休暇（取得予定日: ${formattedDate}）は、現在承認手続き中です。\n今しばらくお待ちください。\n\n対象申請ID: ${applyId}`
+          );
+        }
+        logSheet.getRange(i + 1, 7).setValue("【要】事務対応");
+      }
+    }
+  }
+
+  // ==================================================
+  // 2. 有給失効アラート（2段階フェーズ制御）
+  // ==================================================
+  const grants = grantSheet.getDataRange().getValues();
+
+  for (let i = 1; i < grants.length; i++) {
+    const expireDate = new Date(grants[i][3]);      // D列: 失効日
+    const empId = grants[i][1];                     // B列: 社員ID
+    const leftDays = grants[i][4] - grants[i][5];     // 残日数 (付与 - 消化)
+
+    // フラグの取得（G列: 6ヶ月前通知済みフラグ / H列: 1ヶ月前通知済みフラグ）
+    //労務の都合で2列にしておく//
+    const isNotified6Months = grants[i][6];         // G列 (7列目)
+    const isNotified1Month = grants[i][7];          // H列 (8列目)
+
+    // 残日数がある場合のみ判定
+    if (leftDays > 0) {
+      const diffTime = expireDate - now;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));//Math.ceilで切り上げすることで危機感のあるアラート//
+      const targetEmail = emailMap[empId];
+
+      if (!targetEmail) {
+        Logger.log(`警告: 社員ID [${empId}] のメールアドレスが社員マスタで見つかりませんでした。`);
+        continue;
+      }
+
+      // --------------------------------------------------
+      // フェーズ1：【6ヶ月前】（残り日数10日以上 ＆ まだ6ヶ月通知を送っていない）
+      // --------------------------------------------------
+      if (diffDays <= 180 && diffDays > 30 && leftDays >= 10 && !isNotified6Months) {
+        MailApp.sendEmail(
+          targetEmail,
+          "【重要】有給休暇の計画的消化に関するお知らせ（半年前通知）",
+          `社員ID: ${empId} 様\n\n` +
+          `平素より労務管理へのご協力に感謝いたします。\n\n` +
+          `システムによる自動確認の結果、${Utilities.formatDate(expireDate, "Asia/Tokyo", "yyyy/MM/dd")} に失効予定の有給休暇が「${leftDays}日」残存しております。\n\n` +
+          `半年前の段階でまとまった日数が残っているため、今後の業務スケジュールと調整の上、計画的な取得を推奨いたします。`
+        );
+
+        grantSheet.getRange(i + 1, 7).setValue("通知済み");
+      }
+
+      // --------------------------------------------------
+      // フェーズ2：【1ヶ月前】（残り日数5日以上 ＆ まだ1ヶ月通知を送っていない）
+      // ＋ 失効日から逆算した1年間の取得実績をカウントし、法定5日未満なら警告を上乗せ
+      // --------------------------------------------------
+      else if (diffDays <= 30 && diffDays >= 0 && leftDays >= 5 && !isNotified1Month) {
+
+        // 失効日から逆算して、この付与データの有効期間（1年間）を算出
+        const periodEnd = new Date(expireDate);
+        const periodStart = new Date(expireDate);
+        periodStart.setFullYear(periodStart.getFullYear() - 1);
+
+        // その人の有効期間内かつ「承認済」のものを集計
+        // その人の有効期間内かつ「承認済」のものを集計（取得区分に応じて日数を換算）
+        const takenDaysThisPeriod = logs
+          .filter(row => {
+            if (row[1] !== empId || row[6] !== "承認済") return false;
+            const takeDate = new Date(row[2]);
+            return takeDate >= periodStart && takeDate < periodEnd;
+          })
+          .reduce((sum, row) => {
+            const kubun = row[3]; // D列: 取得区分 ("全休", "AM半休", "PM半休")
+            let dayWeight = 0;
+
+            if (kubun === "全休") {
+              dayWeight = 1.0;
+            } else if (kubun === "AM半休" || kubun === "PM半休") {
+              dayWeight = 0.5;
+            }
+
+            return sum + dayWeight;
+          }, 0);
+
+        let legalWarningText = "";
+        if (takenDaysThisPeriod < 5) {
+          legalWarningText = `\n\n【注意】当有効期間内の有給取得日数が現在「${takenDaysThisPeriod}日」となっており、労働基準法で義務付けられている「年5日の取得」を満たしていません。残り日数とあわせて早急な取得が必要です。`;
+        }
+
+        MailApp.sendEmail(
+          targetEmail,
+          "【緊急/最終警告】有給休暇の失効期限が迫っています",
+          `社員ID: ${empId} 様\n\n` +
+          `失効期限が 1ヶ月以内（${Utilities.formatDate(expireDate, "JST", "yyyy/MM/dd")}）に迫っております。\n\n` +
+          `現在、${leftDays} 日分の有給休暇が未消化となっております。` +
+          legalWarningText +
+          `\n\nこのままでは権利が失効するおそれがありますので、速やかに取得の手続きを行ってください。`
+        );
+
+        grantSheet.getRange(i + 1, 8).setValue("通知済み");
+      }
+    }
+  }
+}
+
+/**
+ * 社員マスタから { 社員ID: 名前 } のマップを作る関数
+ */
+function buildEmployeeNameMap(masterSheet) {
+  const masterData = masterSheet.getDataRange().getValues();
+  const nameMap = {};
+  for (let i = 1; i < masterData.length; i++) {
+    const empId = masterData[i][0];
+    const name = masterData[i][1];
+    if (empId) nameMap[empId] = name;
+  }
+  return nameMap;
+}
+
+/**
+ * 社員マスタから { 社員ID: メールアドレス } のマップを作る関数
+ */
+function buildEmployeeEmailMap(masterSheet) {
+  const masterData = masterSheet.getDataRange().getValues();
+  const emailMap = {};
+  for (let i = 1; i < masterData.length; i++) {
+    const empId = masterData[i][0];
+    const email = masterData[i][4];
+    if (empId) emailMap[empId] = email;
+  }
+  return emailMap;
+}
