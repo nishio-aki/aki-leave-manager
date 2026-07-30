@@ -1,0 +1,138 @@
+/**
+ * 照会フォーム送信時に実行されるメイン関数
+ */
+function handleLeaveInquiry(e) {
+  const CONFIG = {
+    ADMIN_EMAIL: "admin@example.com",
+    TIME_ZONE: "Asia/Tokyo"
+  };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const Q1 = "あなたの「わすれられない」有休を活用した体験を答えよ";
+  const Q2 = "【供述の前に、宣誓を求める】";
+  const Q3 = "*目の前の男は目を輝かせてあなたの次の言葉を待っている*";
+
+  const responses = e.namedValues;
+  const userEmail = responses['メールアドレス'] ? responses['メールアドレス'][0] : null;
+
+  try {
+    // 1. 基本バリデーション
+    if (!userEmail) throw new Error("【システム異常】フォームからメールアドレスが取得できません。");
+
+    // 2. 社員マスタから特定
+    const masterSheet = ss.getSheetByName('社員マスタ');
+    if (!masterSheet) throw new Error("【システム異常】社員マスタシートが存在しません。");
+
+    const masterData = masterSheet.getDataRange().getValues();
+    const targetRow = masterData.find(row => {
+      const emailBase = row[4] ? row[4].split('+')[0] : "";
+      return userEmail.split('+')[0] === emailBase && row[3] === '在職';
+    });
+
+    if (!targetRow) throw new Error("登録されていないメールアドレス、または退職済みのステータスです。");
+
+    const employeeId = targetRow[0];
+    const userName = targetRow[1];
+
+    // 残数計算および有効な付与データの取得
+    const validGrants = getValidGrants(employeeId, new Date());
+    const remainingDays = validGrants.reduce((sum, grant) => sum + grant.leftDays, 0);
+
+    // 3. コンセプト本文の構築
+    const choiceQ1 = responses[Q1] ? responses[Q1][0] : "黙秘する（すぐに照会）";
+    const choiceQ2 = responses[Q2] ? responses[Q2][0] : "供述の準備が整っていないため、今回は黙秘する。";
+    const userGyoujutsu = responses[Q3] ? responses[Q3][0] : null;
+
+    const isConsented = choiceQ2 === "己が供述が組織の休息ナレッジとして「共有される」ことに同意する。";
+
+    let body = `${userName} 殿\n\n`;
+    if (choiceQ1 === "黙秘する（すぐに照会）" || !isConsented) {
+      body += "貴殿の沈黙、しかと聞き入れた。世に『沈黙は金』と言うが、有給休暇こそまさに沈黙のまま金を生む権利である。存分に行使せよ。\n";
+    } else {
+      body += "貴殿のキャンペーン「かけがえのない」供述、確かに記録した。私も久しぶりに有給を取りたいと思わされた。貴殿もたまにはゆっくりするといい。\n";
+      body += `---■ 供述内容\n${userGyoujutsu || '（供述内容が空のようだ）'}\n---\n`;
+    }
+
+    body += `\n【現在の有給残数】\n残り：${remainingDays} 日\n`;
+
+    // 失効情報の追記
+    if (validGrants.length > 0) {
+      const nextGrant = validGrants[0];
+      const formattedExpiryDate = Utilities.formatDate(nextGrant.expireDate, CONFIG.TIME_ZONE, "yyyy/MM/dd");
+
+      body += `\n※警告\n最も近い失効期限は ${formattedExpiryDate} である。\nこの日までに使い切らねば失効してしまう有給が${nextGrant.leftDays} 日分ある。無に帰さないよう権利を行使し、休息を勝ち取ってほしい。\n`;
+    } else {
+      const grantSheet = ss.getSheetByName("付与履歴");
+      if (!grantSheet) throw new Error("【システム異常】付与履歴シートが存在しません。");
+
+      const data = grantSheet.getDataRange().getValues().slice(1);
+      const myGrants = data.filter(row => row[1] === employeeId);
+
+      let nextGrantText = "不明";
+      if (myGrants.length > 0) {
+        myGrants.sort((a, b) => new Date(b[2]) - new Date(a[2]));
+        const lastDate = new Date(myGrants[0][2]);
+
+        const nextDate = new Date(lastDate);
+        nextDate.setFullYear(nextDate.getFullYear() + 1);
+        nextGrantText = Utilities.formatDate(nextDate, CONFIG.TIME_ZONE, "yyyy/MM/dd");
+      }
+
+      body += `\n※特記事項\n現在、行使可能な有給は確認されなかった。次の付与は ${nextGrantText} を予定している。またその頃に照会されたい。\n`;
+    }
+
+    if (remainingDays > 0) {
+      let pastGyoujutsu = "（過去の供述は見当たらなかった……）";
+      const inquirySheet = ss.getSheetByName('照会調書');
+      if (inquirySheet) {
+        const lastRow = inquirySheet.getLastRow();
+        if (lastRow >= 2) {
+          const gyoujutsuRange = inquirySheet.getRange(2, 5, lastRow - 1, 1);
+          const allGyoujutsu = gyoujutsuRange.getValues().flat().filter(val => val !== "");
+          if (allGyoujutsu.length > 0) {
+            pastGyoujutsu = allGyoujutsu[Math.floor(Math.random() * allGyoujutsu.length)];
+          }
+        }
+      }
+
+      body += `\n\n今日も有休を使った記憶が届いているぞ……\n「${pastGyoujutsu}」`;
+    }
+
+    body += "\n\n以上。";
+
+    // 送信
+    MailApp.sendEmail(userEmail, "【調書】有給休暇に関する報告", body);
+
+  } catch (err) {
+    const isSystemError = err.message.includes("【システム異常】");
+    const userMsg = isSystemError ? "システムエラーが発生しました。管理者までご連絡ください。" : err.message;
+
+    // ユーザーへのエラー通知メール
+    if (userEmail) {
+      try {
+        MailApp.sendEmail(userEmail, "【エラー】取り調べに関する報告", `申し訳ないが、手続きに不備があったようだ。\n理由: ${userMsg}`);
+      } catch (mailErr) {//エラー吐くとしたらメール送信しかないから、わかりやすくmailErrと命名//
+        console.error("ユーザーへのエラー通知メール送信に失敗: " + mailErr.message);
+      }
+    }
+
+    // システム異常の場合は管理者へ通知
+    if (isSystemError) {
+      try {
+        MailApp.sendEmail(CONFIG.ADMIN_EMAIL, "【緊急】有給管理システム異常", `発生エラー: ${err.message}`);
+      } catch (adminMailErr) {
+        console.error("管理者への通知メール送信に失敗: " + adminMailErr.message);
+      }
+    }
+
+    // 3. ログの出力（エラーの種類に関わらず、発生したエラーはすべてGASの実行ログに残す）
+    console.error(`照会処理エラー: ${err.message}`);
+
+    // 4. システム異常のときだけトリガーにエラーを知らせる（再スローする）
+    if (isSystemError) {
+      throw err;
+    }
+    // ユーザー起因なら throw しないので、ここで正常終了扱いになる
+  }
+}
