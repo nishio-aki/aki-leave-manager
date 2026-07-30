@@ -1,0 +1,124 @@
+/**
+ * 2. 有給失効アラート（2段階フェーズ制御）
+ */
+function runExpiryAndLegalMonitor() {
+  const CONFIG = {
+    ONE_DAY_MS: 1000 * 60 * 60 * 24,
+    SIX_MONTH_DAYS: 180,
+    ONE_MONTH_DAYS: 30
+  };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName("有給申請");
+  const grantSheet = ss.getSheetByName("付与履歴");
+  const masterSheet = ss.getSheetByName("社員マスタ");
+  const now = new Date();
+
+  const emailMap = buildEmployeeEmailMap(masterSheet);
+  const logs = logSheet.getDataRange().getValues();
+  const grants = grantSheet.getDataRange().getValues();
+
+  for (let i = 1; i < grants.length; i++) {
+    const expireDate = new Date(grants[i][3]); // D列: 失効日
+    const empId = grants[i][1]; // B列: 社員ID
+    const leftDays = grants[i][4] - grants[i][5]; // 残日数 (付与 - 消化)
+
+    // フラグの取得（G列: 6ヶ月前通知済みフラグ / H列: 1ヶ月前通知済みフラグ）
+    //労務の都合で2列にしておく//
+    const isNotified6Months = grants[i][6];         // G列
+    const isNotified1Month = grants[i][7];          // H列
+    // 判定の準備
+    if (leftDays > 0) {
+      const diffTime = expireDate - now;
+      const diffDays = Math.ceil(diffTime / CONFIG.ONE_DAY_MS);//Math.ceilで切り上げすることで危機感のあるアラート//
+      const targetEmail = emailMap[empId];
+
+      if (!targetEmail) {
+        Logger.log(`警告: 社員ID [${empId}] のメールアドレスが社員マスタで見つかりませんでした。`);
+        continue;
+      }
+
+      // --------------------------------------------------
+      // フェーズ1：【6ヶ月前】
+      // --------------------------------------------------
+      if (diffDays <= CONFIG.SIX_MONTH_DAYS && diffDays > CONFIG.ONE_MONTH_DAYS && leftDays >= 10 && !isNotified6Months) {
+        MailApp.sendEmail(
+          targetEmail,
+          "【重要】有給休暇の計画的消化に関するお知らせ（半年前通知）",
+          `社員ID: ${empId} 様\n\n平素より労務管理へのご協力に感謝いたします。\n\nシステムによる自動確認の結果、${Utilities.formatDate(expireDate, "Asia/Tokyo", "yyyy/MM/dd")} に失効予定の有給休暇が「${leftDays}日」残存しております。\n\n半年前の段階でまとまった日数が残っているため、今後の業務スケジュールと調整の上、計画的な取得を推奨いたします。`
+        );
+        grantSheet.getRange(i + 1, 7).setValue("通知済み");
+      }
+
+      // --------------------------------------------------
+      // フェーズ2：【1ヶ月前】 ＋ 法定5日チェック
+      // ＋ 失効日から逆算した1年間の取得実績をカウントし、法定5日未満なら警告を上乗せ
+      // --------------------------------------------------
+      else if (diffDays <= CONFIG.ONE_MONTH_DAYS && diffDays >= 0 && leftDays >= 5 && !isNotified1Month) {
+        const periodEnd = new Date(expireDate);
+        const periodStart = new Date(expireDate);
+        periodStart.setFullYear(periodStart.getFullYear() - 1);
+
+        // その人の有効期間内かつ「承認済」のものを集計（取得区分に応じて日数を換算）
+        const takenDaysThisPeriod = logs
+          .filter(row => {
+            if (row[1] !== empId || row[6] !== "承認済み") return false;
+            const takeDate = new Date(row[2]);
+            return takeDate >= periodStart && takeDate < periodEnd;
+          })
+          .reduce((sum, row) => {
+            const kubun = row[3]; // D列: 取得区分 ("全休", "AM半休", "PM半休")
+            let dayWeight = 0;
+            if (kubun === "全休") {
+              dayWeight = 1.0;
+            } else if (kubun === "AM半休" || kubun === "PM半休") {
+              dayWeight = 0.5;
+            }
+            return sum + dayWeight;
+          }, 0);
+
+        let legalWarningText = "";
+        if (takenDaysThisPeriod < 5) {
+          legalWarningText = `\n\n【注意】当有効期間内の有給取得日数が現在「${takenDaysThisPeriod}日」となっており、労働基準法で義務付けられている「年5日の取得」を満たしていません。残り日数とあわせて早急な取得が必要です。`;
+        }
+
+        MailApp.sendEmail(
+          targetEmail,
+          "【緊急/最終警告】有給休暇の失効期限が迫っています",
+          `社員ID: ${empId} 様\n\n失効期限が 1ヶ月以内（${Utilities.formatDate(expireDate, "Asia/Tokyo", "yyyy/MM/dd")}）に迫っております。\n\n現在、${leftDays} 日分の有給休暇が未消化となっております。` +
+          legalWarningText +
+          `\n\nこのままでは権利が失効するおそれがありますので、速やかに取得の手続きを行ってください。`
+        );
+        grantSheet.getRange(i + 1, 8).setValue("通知済み");
+      }
+    }
+  }
+}
+
+/**
+ * 社員マスタから { 社員ID: 名前 } のマップを作る関数
+ */
+function buildEmployeeNameMap(masterSheet) {
+  const masterData = masterSheet.getDataRange().getValues();
+  const nameMap = {};
+  for (let i = 1; i < masterData.length; i++) {
+    const empId = masterData[i][0];
+    const name = masterData[i][1];
+    if (empId) nameMap[empId] = name;
+  }
+  return nameMap;
+}
+
+/**
+ * 社員マスタから { 社員ID: メールアドレス } のマップを作る関数
+ */
+function buildEmployeeEmailMap(masterSheet) {
+  const masterData = masterSheet.getDataRange().getValues();
+  const emailMap = {};
+  for (let i = 1; i < masterData.length; i++) {
+    const empId = masterData[i][0];
+    const email = masterData[i][4];
+    if (empId) emailMap[empId] = email;
+  }
+  return emailMap;
+}
