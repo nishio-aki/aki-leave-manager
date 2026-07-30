@@ -1,9 +1,27 @@
 // 1. 深夜に走る関数
 function nightlyLeaveGrantBatch() {
+  // --- 【追加】スクリプト全体のロックを取得 ---
+  const lock = LockService.getScriptLock();
+
+  // 10秒間ロックの獲得を試みる（取得できない場合は処理を中断）
+  try {
+    const hasLock = lock.tryLock(10000);
+    if (!hasLock) {
+      console.warn("他のプロセスが実行中のため、今回の自動付与バッチはスキップされました。");
+      return;
+    }
+  } catch (e) {
+    console.error("ロック取得時にエラーが発生しました: " + e.message);
+    return;
+  }
+
+  // ★ ここにCONFIGや設定値をまとめる（スッキリ！）
+  const CONFIG = {
+    ADMIN_EMAIL: "admin@example.com",
+    TIME_ZONE: "Asia/Tokyo"
+  };
   const today = new Date();
   const grantRecords = [];
-  //今このGASが実行されている地域(タイムゾーンの標準時を取得する)の時間基準//
-  const timeZone = Session.getScriptTimeZone();
 
   // ----- 【ここを追加・再定義！】 -----
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -13,7 +31,6 @@ function nightlyLeaveGrantBatch() {
   const empRawData = empSheet.getDataRange().getValues().slice(1);
   // [ [ID, 氏名, 部署, 入社日, ステータス], [...] ] という2次元配列になる
 
-  // ② AIのコードが「employee.id」などのオブジェクト形式を期待しているので、扱いやすいように変換
   //13で見出しは切ったが、データを扱いやすいように列ごとに配列をまとめて、名前を付けておく
   const employeeData = empRawData.map(row => {
     return {
@@ -36,14 +53,11 @@ function nightlyLeaveGrantBatch() {
   });
   // -------------------------------------
 
-  // ここから下の employeeData.forEach(employee => { ... }) が正常に動くようになります！
-
 
   // （中略：社員マスタとルールマスタのデータを取得）
   //for (const employee of employeeData) {　と同じ//
   employeeData.forEach(employee => {
-    const employeeId = employee.id;
-    //ここまででようやく社員IDを獲得!⇒employeeId//
+    const employeeId = employee.id;//ここまででようやく社員IDを獲得!⇒employeeId//
     const hireDate = new Date(employee.hireDate);
     //同様に入社日も獲得⇒hireDate//
 
@@ -69,7 +83,7 @@ function nightlyLeaveGrantBatch() {
         const strExpire = Utilities.formatDate(expireDate, timeZone, "yyyy/MM/dd");
 
 
-        const formattedDate = Utilities.formatDate(today, Session.getScriptTimeZone(), "yyyyMMdd");
+        const formattedDate = Utilities.formatDate(today, CONFIG.TIME_ZONE, "yyyyMMdd");
         const GrantId = `${employeeId}_${formattedDate}`;
 
         // [付与ID, 社員ID, 付与日, 有効期限, 付与日数, 消費済日数]
@@ -97,13 +111,15 @@ function nightlyLeaveGrantBatch() {
 
     catch (e) {
       // 【エラー通知】何か起きた時だけメールが飛ぶ
-      const adminEmail = "your-email@example.com";
       const subject = "【要対応】有給自動付与処理でエラー発生";
       const body = `自動付与処理中にエラーが発生しました。\n\n詳細: ${e.message}\n\n至急、スプレッドシートの「付与履歴」シートを確認してください。`;
 
-      MailApp.sendEmail(adminEmail, subject, body);
+      MailApp.sendEmail(CONFIG.ADMIN_EMAIL, subject, body);
       console.error(`付与エラー: ${e.message}`);
       throw e; // 処理を中断して異常を確定させる
+    } finally {
+      // メイン処理でエラーが発生した場合でも確実にロックを解放する---
+      lock.releaseLock();
     }
   }
 }
