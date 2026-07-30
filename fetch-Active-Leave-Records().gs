@@ -24,14 +24,16 @@ function getValidGrants(employeeId, targetDate) {
       const gTotalDays = Number(row[4]);
       const gUsedDays = Number(row[5]);
 
+      // 小数点第2位以下を四捨五入（または切り捨て）して誤差を消す
+      const leftDays = Math.round((gTotalDays - gUsedDays) * 100) / 100;//エクセルのように第何位を指定できないため*100/100で調整//
       return {
         sheetRowIndex: index + 2,
         empId: row[1],
         grantDate: new Date(row[2]),
         expireDate: new Date(row[3]),
-        gTotalDays: gTotalDays, // ★ 2. 上で定義した変数を入れる
-        gUsedDays: gUsedDays,   // ★ 3. 同上
-        leftDays: gTotalDays - gUsedDays // ★ 4. エラーにならずに計算できる！
+        gTotalDays: gTotalDays,
+        gUsedDays: gUsedDays,   
+        
       };
     })
     
@@ -39,7 +41,7 @@ function getValidGrants(employeeId, targetDate) {
       // 2. ここで条件判定（読みやすい！）
       const isTargetEmployee = (g.empId === employeeId);//employeeIdは関数に入れる値//
       const isWithinPeriod = (targetDate >= g.grantDate && targetDate <= g.expireDate);
-      const hasBalance = (g.leftDays > 0.01);//拡張用お守り"0"→"0.01"//
+      const hasBalance = (g.leftDays > 0.01);//拡張用お守り"0"→"0.01"*ごみ処理//
       //returnの後の条件を満たす配列を返してくれる//
       return isTargetEmployee && isWithinPeriod && hasBalance;
     })
