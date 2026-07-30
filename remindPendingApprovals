@@ -1,0 +1,73 @@
+/**
+ * Monitor.gs
+ * 1. 放置されている申請の監視（ステータス変更＋催促メール）
+ */
+function runPendingApprovalMonitor() {
+  const CONFIG = {
+    FORM_BASE_URL: "https://docs.google.com/forms/d/e/13qr4ek6SvJogwMbZ9E_HWUT_JOfCcgfNHcwDzQ6id6U/viewform",
+    BOSS_MAIL: "boss@example.com",
+    ADMIN_MAIL: "admin@example.com",
+    ONE_DAY_MS: 1000 * 60 * 60 * 24
+  };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName("有給申請");
+  const masterSheet = ss.getSheetByName("社員マスタ");
+  const now = new Date();
+
+  // --------------------------------------------------
+  // 社員マスタからメールアドレス・名前のマップを作成
+  // --------------------------------------------------
+  const nameMap = buildEmployeeNameMap(masterSheet);
+  const logs = logSheet.getDataRange().getValues();
+
+  // ==================================================
+  // 1. 放置申請の監視（Prefilled URL対応版）
+  // ==================================================
+  for (let i = 1; i < logs.length; i++) {
+    const empId = logs[i][1];   // B列: 社員ID
+    const rawDate = logs[i][2]; // C列: 取得日
+    const applyId = logs[i][5]; // F列: 取得ID (G-タイムスタンプ)
+    const status = logs[i][6];  // G列: 承認ステータス
+
+    if (status === "承認待ち") {
+      const timestampStr = String(applyId).replace("G-", "");
+      const applyTime = new Date(timestampStr);
+
+
+      //申請のタイムスタンプと「今」の間が24時間以上のものだけを抽出//
+      //applyTime.getTime()="applyTime"をミリ秒に変換して中身が日付であるか確認//
+      if (!isNaN(applyTime.getTime()) && (now - applyTime) > CONFIG.ONE_DAY_MS) {
+        const empName = nameMap[empId] || empId;//名簿で名前をlookupして、登録されてないときはIDで代用//
+        const targetDate = new Date(rawDate);
+        const formattedDate = Utilities.formatDate(targetDate, "Asia/Tokyo", "yyMMdd");
+        const prefilledUrl = CONFIG.FORM_BASE_URL + "?usp=pp_url&entry.384500102=" + applyId;
+
+        // 管理者（上司）へ催促
+        MailApp.sendEmail(
+          CONFIG.BOSS_MAIL,
+          "【要対応】有給申請の承認が滞っています",
+          `${empName}さんの${formattedDate}の有給申請が24時間以上未対応です。\n\n▼以下のリンクからそのまま承認・調整が可能です：\n${prefilledUrl}`
+        );
+
+        // 事務側へフォロー依頼
+        MailApp.sendEmail(
+          CONFIG.ADMIN_MAIL,
+          `【放置警告】${empName}さんの有給申請が24時間以上未対応です`,
+          `事務担当者様\n\n以下の有給申請が24時間以上承認されず放置されています。\nステータスを「【要】事務対応」に変更しました。\n\n・申請者: ${empName}（ID: ${empId}）\n・取得予定日: ${formattedDate}\n・対象申請ID: ${applyId}`
+        );
+
+        // 申請者へ途中経過
+        const applicantEmail = logs[i][4];// E列: 申請者メールアドレス
+        if (applicantEmail) {
+          MailApp.sendEmail(
+            applicantEmail,
+            "【確認中】有給申請の進捗状況のお知らせ",
+            `${empName} 様\n\n申請いただいた有給休暇（取得予定日: ${formattedDate}）は、現在承認手続き中です。\n今しばらくお待ちください。\n\n対象申請ID: ${applyId}`
+          );
+        }
+        logSheet.getRange(i + 1, 7).setValue("【要】事務対応");
+      }
+    }
+  }
+}
