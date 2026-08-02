@@ -33,7 +33,7 @@ function getValidGrants(employeeId, targetDate) {
         expireDate: new Date(row[3]),
         gTotalDays: gTotalDays,
         gUsedDays: gUsedDays,   
-        
+        leftDays: leftDays
       };
     })
     
