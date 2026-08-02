@@ -3,15 +3,17 @@
  */
 function handleLeaveInquiry(e) {
   const CONFIG = {
-    ADMIN_EMAIL: "admin@example.com",
+    ADMIN_EMAIL: "siuxei.finoa+admin@gmail.com",
     TIME_ZONE: "Asia/Tokyo"
   };
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   const Q1 = "あなたの「わすれられない」有休を活用した体験を答えよ";
-  const Q2 = "【供述の前に、宣誓を求める】";
-  const Q3 = "*目の前の男は目を輝かせてあなたの次の言葉を待っている*";
+  const Q2 = `【供述の前に、宣誓を求める】
+目の前の男は、貴殿の「わすれられない」体験を他の誰かへ共有することに同意を求めている。`;
+  const Q3 = `*目の前の男は目を輝かせてあなたの次の言葉を待っている*
+（※供述のヒント：「待ちに待ったゲームを一日中楽しんだ経験」「久しぶりに部屋をきれいにした時の爽快感」など）`;
 
   const responses = e.namedValues;
   const userEmail = responses['メールアドレス'] ? responses['メールアドレス'][0] : null;
@@ -40,14 +42,14 @@ function handleLeaveInquiry(e) {
     const remainingDays = validGrants.reduce((sum, grant) => sum + grant.leftDays, 0);
 
     // 3. コンセプト本文の構築
-    const choiceQ1 = responses[Q1] ? responses[Q1][0] : "黙秘する（すぐに照会）";
-    const choiceQ2 = responses[Q2] ? responses[Q2][0] : "供述の準備が整っていないため、今回は黙秘する。";
+    const choiceQ1 = responses[Q1] ? responses[Q1][0] : "記録を残さず照会する（送信へ）";
+    const choiceQ2 = responses[Q2] ? responses[Q2][0] : "記録を残さず照会する（送信へ）";
     const userGyoujutsu = responses[Q3] ? responses[Q3][0] : null;
 
     const isConsented = choiceQ2 === "己が供述が組織の休息ナレッジとして「共有される」ことに同意する。";
 
     let body = `${userName} 殿\n\n`;
-    if (choiceQ1 === "黙秘する（すぐに照会）" || !isConsented) {
+    if (choiceQ1 === "記録を残さず照会する（送信へ）" || !isConsented) {
       body += "貴殿の沈黙、しかと聞き入れた。世に『沈黙は金』と言うが、有給休暇こそまさに沈黙のまま金を生む権利である。存分に行使せよ。\n";
     } else {
       body += "貴殿の「かけがえのない」供述、確かに記録した。私も久しぶりに有給を取りたいと思わされた。貴殿もたまにはゆっくりするといい。\n";
