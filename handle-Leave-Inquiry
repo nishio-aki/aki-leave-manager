@@ -2,6 +2,12 @@
  * 照会フォーム送信時に実行されるメイン関数
  */
 function handleLeaveInquiry(e) {
+
+    const sheetName = e.range.getSheet().getName();
+  if (sheetName !== "有休は何日残っているか。それが問題だ。") {
+    return;
+  }
+
   const CONFIG = {
     ADMIN_EMAIL: "siuxei.finoa+admin@gmail.com",
     TIME_ZONE: "Asia/Tokyo"
@@ -50,20 +56,20 @@ function handleLeaveInquiry(e) {
 
     let body = `${userName} 殿\n\n`;
     if (choiceQ1 === "記録を残さず照会する（送信へ）" || !isConsented) {
-      body += "貴殿の沈黙、しかと聞き入れた。世に『沈黙は金』と言うが、有給休暇こそまさに沈黙のまま金を生む権利である。存分に行使せよ。\n";
+      body += "貴殿の沈黙、しかと聞き入れた。世に『沈黙は金』と言うが、有休休暇こそまさに沈黙のまま金を生む権利である。存分に行使せよ。\n";
     } else {
-      body += "貴殿の「かけがえのない」供述、確かに記録した。私も久しぶりに有給を取りたいと思わされた。貴殿もたまにはゆっくりするといい。\n";
+      body += "貴殿の「かけがえのない」供述、確かに記録した。私も久しぶりに有休を取りたいと思わされた。貴殿もたまにはゆっくりするといい。\n";
       body += `---■ 供述内容\n${userGyoujutsu || '（供述内容が空のようだ）'}\n---\n`;
     }
 
-    body += `\n【現在の有給残数】\n残り：${remainingDays} 日\n`;
+    body += `\n【現在の有休残数】\n残り：${remainingDays} 日\n`;
 
     // 失効情報の追記
     if (validGrants.length > 0) {
       const nextGrant = validGrants[0];
       const formattedExpiryDate = Utilities.formatDate(nextGrant.expireDate, CONFIG.TIME_ZONE, "yyyy/MM/dd");
 
-      body += `\n※警告\n最も近い失効期限は ${formattedExpiryDate} である。\nこの日までに使い切らねば失効してしまう有給が${nextGrant.leftDays} 日分ある。無に帰さないよう権利を行使し、休息を勝ち取ってほしい。\n`;
+      body += `\n※警告\n最も近い失効期限は ${formattedExpiryDate} である。\nこの日までに使い切らねば失効してしまう有休が${nextGrant.leftDays} 日分ある。無に帰さないよう権利を行使し、休息を勝ち取ってほしい。\n`;
     } else {
       const grantSheet = ss.getSheetByName("付与履歴");
       if (!grantSheet) throw new Error("【システム異常】付与履歴シートが存在しません。");
@@ -81,7 +87,7 @@ function handleLeaveInquiry(e) {
         nextGrantText = Utilities.formatDate(nextDate, CONFIG.TIME_ZONE, "yyyy/MM/dd");
       }
 
-      body += `\n※特記事項\n現在、行使可能な有給は確認されなかった。次の付与は ${nextGrantText} を予定している。またその頃に照会されたい。\n`;
+      body += `\n※特記事項\n現在、行使可能な有休は確認されなかった。次の付与は ${nextGrantText} を予定している。またその頃に照会されたい。\n`;
     }
 
     if (remainingDays > 0) {
@@ -104,7 +110,7 @@ function handleLeaveInquiry(e) {
     body += "\n\n以上。";
 
     // 送信
-    MailApp.sendEmail(userEmail, "【調書】有給休暇に関する報告", body);
+    MailApp.sendEmail(userEmail, "【調書】有休休暇に関する報告", body);
 
   } catch (err) {
     const isSystemError = err.message.includes("【システム異常】");
@@ -122,7 +128,7 @@ function handleLeaveInquiry(e) {
     // システム異常の場合は管理者へ通知
     if (isSystemError) {
       try {
-        MailApp.sendEmail(CONFIG.ADMIN_EMAIL, "【緊急】有給管理システム異常", `発生エラー: ${err.message}`);
+        MailApp.sendEmail(CONFIG.ADMIN_EMAIL, "【緊急】有休管理システム異常", `発生エラー: ${err.message}`);
       } catch (adminMailErr) {
         console.error("管理者への通知メール送信に失敗: " + adminMailErr.message);
       }
