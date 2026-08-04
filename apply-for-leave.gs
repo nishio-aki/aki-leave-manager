@@ -3,10 +3,16 @@
  * 有給申請受付～ステータス"承認待ち"で貼り付け～上司へ承認フォーム送信迄
  */
 function onFormSubmitHandler(e) {
+
+  const sheetName = e.range.getSheet().getName();
+  if (sheetName !== "有休申請") {
+    return;
+  }
+  
   const CONFIG = {
-    FORM_BASE_URL: "https://docs.google.com/forms/d/e/13qr4ek6SvJogwMbZ9E_HWUT_JOfCcgfNHcwDzQ6id6U/viewform",
-    BOSS_MAIL: "boss@example.com",
-    ADMIN_EMAIL: "admin@example.com" // 💡 追加しておく
+    FORM_BASE_URL: "https://docs.google.com/forms/d/e/1FAIpQLSeasrMXfIZgIRQwCAk04w8YJJIbdEKgD-D46UGfaPe-P-g8Bg/viewform",
+    BOSS_MAIL: "siuxei.finoa@gmail.com",
+    ADMIN_EMAIL: "siuxei.finoa@gmail.com"
   };
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const masterSheet = ss.getSheetByName("社員マスタ");
@@ -14,8 +20,8 @@ function onFormSubmitHandler(e) {
   const empId = e.namedValues['社員ID'][0];
   const targetDate = e.namedValues['取得日'][0];
   const type = e.namedValues['取得区分'][0];
-  const email = e.userEmail;
-
+  const email = e.namedValues['メールアドレス'] ? e.namedValues['メールアドレス'][0] : null;
+  
   let empName = "不明";
   const masterData = masterSheet.getDataRange().getValues();
 
@@ -30,7 +36,7 @@ function onFormSubmitHandler(e) {
   const timestamp = Utilities.formatDate(now, "Asia/Tokyo", "yyyyMMdd-HHmmss");
   const requestId = "G-" + timestamp;
 
-  // --- 書き込みの瞬間だけロックをかける ---
+// --- 書き込みの瞬間だけロックをかける ---
   const lock = LockService.getScriptLock();
   let errorToThrow = null;
 
@@ -40,14 +46,21 @@ function onFormSubmitHandler(e) {
       throw new Error("他の申請処理と競合したため、タイムアウトしました。もう一度お試しください。");
     }
 
-    const logSheet = ss.getSheetByName("取得履歴");
-    logSheet.appendRow([now, empId, targetDate, type, email, requestId, "承認待ち"]);
+    const logSheet = ss.getSheetByName("有休申請");
+    
+    // 💡 【スマートな修正】
+    // フォームが自動で追加した「一番下の行」の行番号を取得する
+    const lastRow = logSheet.getLastRow();
+
+    // その行の「6列目（申請ID）」と「7列目（ステータス）」に、値を追加で書き込む
+    logSheet.getRange(lastRow, 6).setValue(requestId);
+    logSheet.getRange(lastRow, 7).setValue("承認待ち");
 
   } catch (err) {
-    const subject = "【要対応】有給申請の受付処理でエラー発生";
+    const subject = "【要対応】有休申請の受付処理でエラー発生";
     MailApp.sendEmail(CONFIG.ADMIN_EMAIL, subject, `詳細: ${err.message}`);
     console.error(`受付エラー: ${err.message}`);
-    
+
     errorToThrow = err; // 💡 エラーを退避
 
   } finally {
@@ -64,9 +77,7 @@ function onFormSubmitHandler(e) {
 
   MailApp.sendEmail(
     CONFIG.BOSS_MAIL,
-    `【有給承認依頼】${empName}さんからの申請`,
+    `【有休承認依頼】${empName}さんからの申請`,
     `以下の申請の承認をお願いします。\n\n申請者: ${empName} 様（ID: ${empId}）\n取得日: ${targetDate}（${type}）\n申請ID: ${requestId}\n申請者メール: ${email}\n\n▼こちらのURLから承認、または調整を行ってください:\n${prefilledUrl}`
   );
 }
-}
-
