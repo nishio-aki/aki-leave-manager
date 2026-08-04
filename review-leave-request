@@ -5,14 +5,19 @@
  * 時季変更を打診する：変更を打診する理由と、避けてほしい期間をメールで返送
  */
 function onApprovalFormSubmit(e) {
+  const sheetName = e.range.getSheet().getName();
+  if (sheetName !== "承認") {
+    return;
+  }
+
   const CONFIG = {
-    ADMIN_MAIL: "admin+clerk@example.com"
+    ADMIN_MAIL: "siuxei.finoa@gmail.com"
   };
   const requestId = e.namedValues['申請ID'][0];
   const status = e.namedValues['承認判定'][0];
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const logSheet = ss.getSheetByName("有給申請");
+  const logSheet = ss.getSheetByName("有休申請");
   const grantSheet = ss.getSheetByName("付与履歴");
 
   // --- ① データの事前読み取り（読込だけならロック不要） ---
@@ -45,7 +50,7 @@ function onApprovalFormSubmit(e) {
 
   // メール送信用に変数を事前に計算・用意しておく
   let updates = [];
-  let isApproved = (status === "承認する");
+  let isApproved = (status === "承認する(送信へ)");
 
   if (isApproved) {
     const date = new Date(rawDate);
@@ -65,12 +70,12 @@ function onApprovalFormSubmit(e) {
 
     // 再度ステータスをロック内で確認（安全のため）
     const latestStatus = logSheet.getRange(targetRow, 7).getValue();
-    if (latestStatus === "承認済み" || latestStatus === "調整依頼中") { // 再度ステータスをロック内で確認（安全のため）*これしないとほぼ同時に承認処理が走った場合に更新されずに有給が使えてしまう
+    if (latestStatus === "承認済み" || latestStatus === "調整依頼中") { // 再度ステータスをロック内で確認（安全のため）*これしないとほぼ同時に承認処理が走った場合に更新されずに有休が使えてしまう
       throw new Error("すでに処理済みの申請です。");
     }
 
     if (isApproved) {
-      // 履歴ステータス更新 ＆ 有給残高の書き込み
+      // 履歴ステータス更新 ＆ 有休残高の書き込み
       logSheet.getRange(targetRow, 7).setValue("承認済み");
       updates.forEach(u => grantSheet.getRange(u.row, 6).setValue(u.newUsedDays));
     } else if (status === "時季変更を打診する") {
@@ -85,8 +90,8 @@ function onApprovalFormSubmit(e) {
     
     MailApp.sendEmail(
       CONFIG.ADMIN_MAIL,
-      `【要確認・有給エラー】申請ID: ${requestId}`,
-      `事務担当者様\n\n有給承認の処理中にエラーが発生しました。\n\n・申請ID: ${requestId}\n・社員ID: ${empId}\n・エラー内容: ${err.message}`
+      `【要確認・有休エラー】申請ID: ${requestId}`,
+      `事務担当者様\n\n有休承認の処理中にエラーが発生しました。\n\n・申請ID: ${requestId}\n・社員ID: ${empId}\n・エラー内容: ${err.message}`
     );
     
     errorToThrow = err; // 💡 すグに throw せず、変数に退避する
@@ -106,28 +111,27 @@ function onApprovalFormSubmit(e) {
     if (applicantEmail) {
       MailApp.sendEmail(
         applicantEmail,
-        "【承認完了】有給休暇の申請が承認されました",
-        `申請者様\n\n以下の有給休暇申請が【承認】されました。\n\n・取得予定日: ${formattedDate}（${type}）\n・申請ID: ${requestId}\n\n※本メールは自動送信です。`
+        "【承認完了】有休休暇の申請が承認されました",
+        `申請者様\n\n以下の有休休暇申請が【承認】されました。\n\n・取得予定日: ${formattedDate}（${type}）\n・申請ID: ${requestId}\n\n※本メールは自動送信です。`
       );
     }
     MailApp.sendEmail(
       CONFIG.ADMIN_MAIL,
-      `【有給確定】${empId}さんの有給申請が承認されました`,
-      `事務担当者様\n\n以下の有給申請が承認され、消化処理が完了しました。\n\n・社員ID: ${empId}\n・取得日: ${formattedDate}\n・区分: ${type}\n・申請ID: ${requestId}`
+      `【有休確定】${empId}さんの有休申請が承認されました`,
+      `事務担当者様\n\n以下の有休申請が承認され、消化処理が完了しました。\n\n・社員ID: ${empId}\n・取得日: ${formattedDate}\n・区分: ${type}\n・申請ID: ${requestId}`
     );
   } else if (status === "時季変更を打診する") {
     const reason = e.namedValues['時季変更を打診する理由'] ? e.namedValues['時季変更を打診する理由'][0] : "記載なし";
-    const avoidStart = e.namedValues['有給取得を避けてほしい期間（開始日）'] ? e.namedValues['有給取得を避けてほしい期間（開始日）'][0] : "";
-    const avoidEnd = e.namedValues['有給取得を避けてほしい期間（終了日）'] ? e.namedValues['有給取得を避けてほしい期間（終了日）'][0] : "";
+    const avoidStart = e.namedValues['有休取得を避けてほしい期間（開始日）'] ? e.namedValues['有休取得を避けてほしい期間（開始日）'][0] : "";
+    const avoidEnd = e.namedValues['有休取得を避けてほしい期間（終了日）'] ? e.namedValues['有休取得を避けてほしい期間（終了日）'][0] : "";
     const avoidPeriodText = (avoidStart && avoidEnd) ? `・避けてほしい期間: ${avoidStart} 〜 ${avoidEnd}\n` : "";
 
     if (applicantEmail) {
       MailApp.sendEmail(
         applicantEmail,
-        "【要確認】有給休暇の時季変更についてのご相談",
+        "【要確認】有休休暇の時季変更についてのご相談",
         `申請者様\n\n上司より時季変更の打診がございました。\n\n・取得予定日: ${formattedDate}（${type}）\n・申請ID: ${requestId}\n${avoidPeriodText}・理由:\n${reason}\n\n再調整をお願いします。`
       );
     }
   }
-
 }
