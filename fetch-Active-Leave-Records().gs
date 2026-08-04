@@ -1,9 +1,9 @@
 /**
- * 対象社員の現在有効な有給データを「付与履歴」から抽出して古い順にソートして返す
+ * 対象社員の現在有効な有休データを「付与履歴」から抽出して古い順にソートして返す
  * ※JSDoc-各変数の内容を明確にする注釈
  * @param {string} employeeId - 社員ID
  * @param {Date} targetDate - 判定の基準日（申請日や照会当日）
- * @return {Array} 有効な有給データの配列
+ * @return {Array} 有効な有休データの配列
  */
 //同様の形で変数を入れる窓口関数//
 function getValidGrants(employeeId, targetDate) {
