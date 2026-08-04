@@ -1,5 +1,5 @@
 # 🌿 現場が自走する！Google Workspaceを活用した持続可能な有給管理システム
-[![YouTube Demo]([https://img.shields.io/badge/YouTube-デモ動画を見る-red?style=for-the-badge&logo=youtube)](https://youtu.be/あなたのYouTubeのURL](https://youtu.be/5xC31ppwvsc))
+[![YouTube Demo](https://img.shields.io/badge/YouTube-デモ動画を見る-red?style=for-the-badge&logo=youtube)]([https://youtu.be/あなたのYouTubeのURL](https://youtu.be/5xC31ppwvsc))
 ## 📊 1.システム構成図
 ```mermaid
 flowchart TD
