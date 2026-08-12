@@ -4,7 +4,7 @@
 function handleLeaveInquiry(e) {
 
     const sheetName = e.range.getSheet().getName();
-  if (sheetName !== "有休は何日残っているか。それが問題だ。") {
+  if (sheetName !== "有休照会（ゲーミフィケーション版）") {
     return;
   }
 
@@ -15,10 +15,10 @@ function handleLeaveInquiry(e) {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  const Q1 = "あなたの「わすれられない」有休を活用した体験を答えよ";
+  const Q1 = "貴殿の「わすれられない」有休を活用した体験を答えよ";
   const Q2 = `  【供述の前に、宣誓を求める】  
 目の前の男は、貴殿の「わすれられない」体験を他の誰かへ共有することに同意を求めている。`;
-  const Q3 = `*目の前の男は目を輝かせてあなたの次の言葉を待っている*
+  const Q3 = `*目の前の男は目を輝かせて貴殿の次の言葉を待っている*
 （※供述のヒント：「待ちに待ったゲームを一日中楽しんだ経験」「久しぶりに部屋をきれいにした時の爽快感」など）`;
 
   const responses = e.namedValues;
