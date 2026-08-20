@@ -11,7 +11,7 @@ function onApprovalFormSubmit(e) {
   }
 
   const CONFIG = {
-    ADMIN_MAIL: "siuxei.finoa@gmail.com"
+    ADMIN_MAIL: "admin.finoa@gmail.com"
   };
   const requestId = e.namedValues['申請ID'][0];
   const status = e.namedValues['承認判定'][0];
