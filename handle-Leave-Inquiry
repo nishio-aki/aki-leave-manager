@@ -9,7 +9,7 @@ function handleLeaveInquiry(e) {
   }
 
   const CONFIG = {
-    ADMIN_EMAIL: "siuxei.finoa+admin@gmail.com",
+    ADMIN_EMAIL: "admin@gmail.com",
     TIME_ZONE: "Asia/Tokyo"
   };
 
