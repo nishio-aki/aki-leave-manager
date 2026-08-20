@@ -11,8 +11,8 @@ function onFormSubmitHandler(e) {
   
   const CONFIG = {
     FORM_BASE_URL: "https://docs.google.com/forms/d/e/1FAIpQLSeasrMXfIZgIRQwCAk04w8YJJIbdEKgD-D46UGfaPe-P-g8Bg/viewform",
-    BOSS_MAIL: "siuxei.finoa@gmail.com",
-    ADMIN_EMAIL: "siuxei.finoa@gmail.com"
+    BOSS_MAIL: "boss@gmail.com",
+    ADMIN_EMAIL: "admin@gmail.com"
   };
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const masterSheet = ss.getSheetByName("社員マスタ");
