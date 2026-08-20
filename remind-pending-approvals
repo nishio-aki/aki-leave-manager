@@ -5,8 +5,8 @@
 function runPendingApprovalMonitor() {
   const CONFIG = {
     FORM_BASE_URL: "https://docs.google.com/forms/d/e/1FAIpQLSeasrMXfIZgIRQwCAk04w8YJJIbdEKgD-D46UGfaPe-P-g8Bg/viewform",
-    BOSS_MAIL: "siuxei.finoa@gmail.com",
-    ADMIN_MAIL: "siuxei.finoa@gmail.com",
+    BOSS_MAIL: "boss@gmail.com",
+    ADMIN_MAIL: "admin@gmail.com",
     ONE_DAY_MS: 1000 * 60 * 60 * 24
   };
 
