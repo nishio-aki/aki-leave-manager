@@ -211,7 +211,7 @@ subgraph Independent [定期バッチ・参照系]
 
 
 
-## 📝 6. 試行錯誤と設計の変遷（Development Story & Design Choices）
+## 📝 6. 試行錯誤と設計の変遷
 
 
 
@@ -283,7 +283,7 @@ subgraph Independent [定期バッチ・参照系]
 
 ---
 
-## 🛡️ 7. 現場の安定稼働を支える技術的こだわり（Design Policies）
+## 🛡️ 7. 現場の安定稼働を支える技術的こだわり
 
 
 
