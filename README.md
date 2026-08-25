@@ -1,6 +1,6 @@
 # 🌿 現場が自走する！Google Workspaceを活用した持続可能な有休管理システム
 
-[![YouTube Demo](https://img.shields.io/badge/YouTube-デモ動画を見る-red?style=for-the-badge&logo=youtube)](https://www.youtube.com/watch?v=9dvlMWyuAR8)
+[![YouTube Demo](https://img.shields.io/badge/YouTube-デモ動画を見る-red?style=for-the-badge&logo=youtube)]([https://www.youtube.com/watch?v=9dvlMWyuAR8](https://youtu.be/1JpWedjcH9s))
 
 ## 概要
 
